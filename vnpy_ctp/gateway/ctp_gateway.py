@@ -26,7 +26,9 @@ from vnpy.trader.object import (
     CancelRequest,
     SubscribeRequest,
 )
-from vnpy.trader.utility import get_folder_path, ZoneInfo
+# from vnpy.trader.utility import get_folder_path, ZoneInfo
+from vnpy.trader.utility import get_folder_path
+import pytz
 from vnpy.trader.event import EVENT_TIMER
 
 from ..api import (
@@ -126,11 +128,16 @@ OPTIONTYPE_CTP2VT: Dict[str, OptionType] = {
 
 # 其他常量
 MAX_FLOAT = sys.float_info.max                  # 浮点数极限值
-CHINA_TZ = ZoneInfo("Asia/Shanghai")       # 中国时区
+CHINA_TZ = pytz.timezone("Asia/Shanghai")       # 中国时区
 
 # 合约数据全局缓存字典
 symbol_contract_map: Dict[str, ContractData] = {}
 
+EVENT_MD_LOGIN = 'eMdLogin'
+EVENT_MD_LOGINFAIL = 'eMdLoginFail'
+
+# 合约数据全局缓存字典
+symbol_contract_map: Dict[str, ContractData] = {}
 
 class CtpGateway(BaseGateway):
     """
@@ -313,7 +320,7 @@ class CtpMdApi(MdApi):
 
         timestamp: str = f"{date_str} {data['UpdateTime']}.{int(data['UpdateMillisec']/100)}"
         dt: datetime = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S.%f")
-        dt: datetime = dt.replace(tzinfo=CHINA_TZ)
+        dt: datetime = CHINA_TZ.localize(dt)
 
         tick: TickData = TickData(
             symbol=symbol,
@@ -606,7 +613,6 @@ class CtpTdApi(TdApi):
                 pricetick=data["PriceTick"],
                 gateway_name=self.gateway_name
             )
-
             # 期权相关
             if contract.product == Product.OPTION:
                 # 移除郑商所期权产品名称带有的C/P后缀
@@ -621,10 +627,10 @@ class CtpTdApi(TdApi):
                 contract.option_index = str(data["StrikePrice"])
                 contract.option_listed = datetime.strptime(data["OpenDate"], "%Y%m%d")
                 contract.option_expiry = datetime.strptime(data["ExpireDate"], "%Y%m%d")
+            if contract.product ==Product.FUTURES:
+                self.gateway.on_contract(contract)
 
-            self.gateway.on_contract(contract)
-
-            symbol_contract_map[contract.symbol] = contract
+                symbol_contract_map[contract.symbol] = contract
 
         if last:
             self.contract_inited = True
